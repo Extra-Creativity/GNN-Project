@@ -1,0 +1,7 @@
+dgcnn/data/
+dgcnn/checkpoints/
+dgcnn/log/
+dgcnn/pretrained/
+*.pyc
+.idea
+.DS_Store
