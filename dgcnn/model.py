@@ -288,7 +288,7 @@ class DGCNN_Eigvec(nn.Module):
         self.conv1 = nn.Sequential(nn.Conv2d(3 * 2, 64, kernel_size=1, bias=False),
                                    self.bn1,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv2 = nn.Sequential(nn.Conv2d((64+self.eigen_topk)*2, 64, kernel_size=1, bias=False),
+        self.conv2 = nn.Sequential(nn.Conv2d(64*2, 64, kernel_size=1, bias=False),
                                    self.bn2,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.conv3 = nn.Sequential(nn.Conv2d(64*2, 128, kernel_size=1, bias=False),
@@ -297,7 +297,7 @@ class DGCNN_Eigvec(nn.Module):
         self.conv4 = nn.Sequential(nn.Conv2d(128*2, 256, kernel_size=1, bias=False),
                                    self.bn4,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv5 = nn.Sequential(nn.Conv1d(512+self.eigen_topk, args.emb_dims, kernel_size=1, bias=False),
+        self.conv5 = nn.Sequential(nn.Conv1d(512, args.emb_dims, kernel_size=1, bias=False),
                                    self.bn5,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.linear1 = nn.Linear(args.emb_dims*2, 512, bias=False)
@@ -314,8 +314,9 @@ class DGCNN_Eigvec(nn.Module):
             x, self.eigen_k, self.eigen_topk, ti_hint_only=True)
 
         x = get_graph_feature(x, k=self.k)
+        x[:, :3, :] = eigvecs # substitute diff with eigvecs.
         x = self.conv1(x)
-        x1 = torch.concat((x, eigvecs), dim=1).max(dim=-1, keepdim=False)[0]
+        x1 = x.max(dim=-1, keepdim=False)[0]
 
         x = get_graph_feature(x1, k=self.k)
         x = self.conv2(x)
