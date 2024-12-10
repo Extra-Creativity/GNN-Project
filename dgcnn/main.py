@@ -11,13 +11,15 @@
 from __future__ import print_function
 import os
 import argparse
+from email.policy import default
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from data import ModelNet40
-from model import PointNet, DGCNN
+from model import PointNet, DGCNN, DGCNN_Eigval, DGCNN_Eigvec
 import numpy as np
 from torch.utils.data import DataLoader
 from util import cal_loss, IOStream
@@ -51,6 +53,10 @@ def train(args, io):
         model = PointNet(args).to(device)
     elif args.model == 'dgcnn':
         model = DGCNN(args).to(device)
+    elif args.model == 'dgcnn_eigval':
+        model = DGCNN_Eigval(args).to(device)
+    elif args.model == 'dgcnn_eigvec':
+        model = DGCNN_Eigvec(args).to(device)
     else:
         raise Exception("Not implemented")
     print(str(model))
@@ -175,8 +181,8 @@ if __name__ == "__main__":
     parser.add_argument('--exp_name', type=str, default='exp', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='dgcnn', metavar='N',
-                        choices=['pointnet', 'dgcnn'],
-                        help='Model to use, [pointnet, dgcnn]')
+                        choices=['pointnet', 'dgcnn', 'dgcnn_eigval', 'dgcnn_eigvec'],
+                        help='Model to use, [pointnet, dgcnn, dgcnn_eigval, dgcnn_eigvec]')
     parser.add_argument('--dataset', type=str, default='modelnet40', metavar='N',
                         choices=['modelnet40'])
     parser.add_argument('--batch_size', type=int, default=32, metavar='batch_size',
@@ -207,6 +213,10 @@ if __name__ == "__main__":
                         help='Num of nearest neighbors to use')
     parser.add_argument('--model_path', type=str, default='', metavar='N',
                         help='Pretrained model path')
+    parser.add_argument("--eig_topk", type=int, default=3,
+                        help='Num of selected eigen value')
+    parser.add_argument("--eig_knn_k", type=int, default=20,
+                        help='Num of nearest neighbors for eigen extraction to use')
     args = parser.parse_args()
 
     _init_()
