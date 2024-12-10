@@ -13,8 +13,8 @@ import sys
 import glob
 import h5py
 import numpy as np
+from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
-
 
 def download():
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,7 +27,6 @@ def download():
         os.system('wget %s; unzip %s' % (www, zipfile))
         os.system('mv %s %s' % (zipfile[:-4], DATA_DIR))
         os.system('rm %s' % (zipfile))
-
 
 def load_data(partition):
     download()
@@ -54,6 +53,12 @@ def translate_pointcloud(pointcloud):
     translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
     return translated_pointcloud
 
+def rotate_pointcloud(pointcloud):
+    angles = np.random.uniform(0, 2 * np.pi, 3)
+    dirs = ''.join(["xyz"[i] for i in np.random.permutation(3)])
+
+    rot = Rotation.from_euler(dirs, angles)
+    return pointcloud @ rot.as_matrix().astype(np.float32)
 
 def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.02):
     N, C = pointcloud.shape
@@ -65,7 +70,7 @@ class ModelNet40(Dataset):
     def __init__(self, num_points, partition='train'):
         self.data, self.label = load_data(partition)
         self.num_points = num_points
-        self.partition = partition        
+        self.partition = partition
 
     def __getitem__(self, item):
         pointcloud = self.data[item][:self.num_points]
@@ -73,6 +78,7 @@ class ModelNet40(Dataset):
         if self.partition == 'train':
             pointcloud = translate_pointcloud(pointcloud)
             np.random.shuffle(pointcloud)
+        pointcloud = rotate_pointcloud(pointcloud)
         return pointcloud, label
 
     def __len__(self):

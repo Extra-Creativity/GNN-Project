@@ -16,6 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch import Tensor
 
 
 def knn(x, k):
@@ -25,7 +26,6 @@ def knn(x, k):
  
     idx = pairwise_distance.topk(k=k, dim=-1)[1]   # (batch_size, num_points, k)
     return idx
-
 
 def get_graph_feature(x, k=20, idx=None):
     batch_size = x.size(0)
@@ -47,11 +47,50 @@ def get_graph_feature(x, k=20, idx=None):
     feature = x.view(batch_size*num_points, -1)[idx, :]
     feature = feature.view(batch_size, num_points, k, num_dims) 
     x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
-    
+
     feature = torch.cat((feature-x, x), dim=3).permute(0, 3, 1, 2).contiguous()
   
     return feature
 
+def get_ti_hint(x: Tensor, eigen_k):
+    """
+    x: (batch_size, num_points, k, num_dims), meaning x_j-x_i in KNN
+    """
+    batch_size, num_points = x.shape[0], x.shape[1]
+    with torch.no_grad():
+        x = x.reshape((batch_size * num_points, *x.shape[2:]))
+        y = x @ x.transpose(-2, -1)
+        eigvals = torch.abs(torch.linalg.eigvals(y)).to(torch.float)
+        eigvals = torch.topk(eigvals, eigen_k)[0]
+    return eigvals.reshape((batch_size, num_points, eigen_k))
+
+def get_graph_feature_with_ti_hint(x, k, eigen_k, idx=None):
+    batch_size = x.size(0)
+    num_points = x.size(2)
+    x = x.view(batch_size, -1, num_points)
+    if idx is None:
+        idx = knn(x, k=k)  # (batch_size, num_points, k)
+    device = torch.device('cuda')
+
+    idx_base = torch.arange(0, batch_size, device=device).view(-1, 1, 1) * num_points
+
+    idx = idx + idx_base
+
+    idx = idx.view(-1)
+
+    _, num_dims, _ = x.size()
+
+    x = x.transpose(2, 1).contiguous()
+    feature = x.view(batch_size * num_points, -1)[idx, :]
+    feature = feature.view(batch_size, num_points, k, num_dims)
+    x = x.view(batch_size, num_points, 1, num_dims).repeat(1, 1, k, 1)
+
+    diff = feature - x
+    ti_hint = get_ti_hint(diff, eigen_k).transpose(1, 2) # top 3 eigen values
+
+    feature = torch.cat((diff, x), dim=3).permute(0, 3, 1, 2).contiguous()
+
+    return feature, ti_hint
 
 class PointNet(nn.Module):
     def __init__(self, args, output_channels=40):
@@ -90,6 +129,7 @@ class DGCNN(nn.Module):
         super(DGCNN, self).__init__()
         self.args = args
         self.k = args.k
+        self.eigen_k = 3
         
         self.bn1 = nn.BatchNorm2d(64)
         self.bn2 = nn.BatchNorm2d(64)
@@ -100,7 +140,7 @@ class DGCNN(nn.Module):
         self.conv1 = nn.Sequential(nn.Conv2d(6, 64, kernel_size=1, bias=False),
                                    self.bn1,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv2 = nn.Sequential(nn.Conv2d(64*2, 64, kernel_size=1, bias=False),
+        self.conv2 = nn.Sequential(nn.Conv2d((64 + self.eigen_k) *2, 64, kernel_size=1, bias=False),
                                    self.bn2,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.conv3 = nn.Sequential(nn.Conv2d(64*2, 128, kernel_size=1, bias=False),
@@ -109,7 +149,7 @@ class DGCNN(nn.Module):
         self.conv4 = nn.Sequential(nn.Conv2d(128*2, 256, kernel_size=1, bias=False),
                                    self.bn4,
                                    nn.LeakyReLU(negative_slope=0.2))
-        self.conv5 = nn.Sequential(nn.Conv1d(512, args.emb_dims, kernel_size=1, bias=False),
+        self.conv5 = nn.Sequential(nn.Conv1d(512 + self.eigen_k, args.emb_dims, kernel_size=1, bias=False),
                                    self.bn5,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.linear1 = nn.Linear(args.emb_dims*2, 512, bias=False)
@@ -122,9 +162,9 @@ class DGCNN(nn.Module):
 
     def forward(self, x):
         batch_size = x.size(0)
-        x = get_graph_feature(x, k=self.k)
+        (x, ti_hint) = get_graph_feature_with_ti_hint(x, self.k, self.eigen_k)
         x = self.conv1(x)
-        x1 = x.max(dim=-1, keepdim=False)[0]
+        x1 = torch.concat((x.max(dim=-1, keepdim=False)[0], ti_hint), dim=1)
 
         x = get_graph_feature(x1, k=self.k)
         x = self.conv2(x)
