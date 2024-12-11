@@ -3,7 +3,9 @@
 进行计算。目前修改的比较少，就是对于KNN里的局部计算上述特征，而且没有逐层计算。在传入的参数里`eig_topk`表示选择k个
 特征值，`eig_knn_k`表示求特征值的KNN范围。
 ```commandline
-python main.py --exp_name=dgcnn_eigval_1024 --model=dgcnn_eigval --num_points=1024 --k=20 --eig_topk=3 --eig_knn_k=20 --use_sgd=True --epochs=10
+python main.py --exp_name=dgcnn_eigval_1024 --model=dgcnn_eigval --num_points=1024 --k=20 --eig_topk=3 --eig_knn_k=20 --use_sgd=True
+python main.py --exp_name=dgcnn_eigvec_1024 --model=dgcnn_eigvec --num_points=1024 --k=20 --eig_topk=3 --eig_knn_k=20 --use_sgd=True
+python main.py --exp_name=dgcnn_1024 --model=dgcnn --num_points=1024 --k=20 --use_sgd=True
 ```
 特别地，求特征值时使用的`torch.no_grad()`，即不从特征值向前传播梯度。
 + `DGCNN_Eigval`，就是取topk个特征值，拼接到最初始的特征（即三维坐标）上面；网络就是把最开始的通道数量改为(3 + topk)*2，
