@@ -69,11 +69,16 @@ def get_ti_hint(x: Tensor, eigen_k, eigval_only):
             return eigvals.reshape((batch_size, num_points, eigen_k))
 
         eigvals, eigvecs = torch.linalg.eigh(y)
-        eigvals = torch.abs(eigvals).to(torch.float)
-        eigvals, idx = torch.topk(eigvals, eigen_k)
-        eigvecs = eigvecs.to(torch.float)[torch.arange(collapsed_size).unsqueeze(1), idx]
+        eigvals = eigvals.to(torch.float)
+        abs_eigvals = torch.abs(eigvals)
+        abs_eigvals, idx = torch.topk(abs_eigvals, eigen_k)
 
-    return eigvals.reshape((batch_size, num_points, eigen_k)),\
+        dim0 = torch.arange(collapsed_size).unsqueeze(1)
+        eigvecs = eigvecs.to(torch.float)[dim0, idx]
+        inv_idx = eigvals[dim0, idx] < 0
+        eigvecs[inv_idx] = -eigvecs[inv_idx]
+
+    return abs_eigvals.reshape((batch_size, num_points, eigen_k)), \
            eigvecs.reshape((batch_size, num_points, eigen_k, k))
 
 def get_graph_feature_with_ti_hint(x, k, eigen_k, idx=None, eigval_only=False, ti_hint_only=False):
@@ -285,7 +290,7 @@ class DGCNN_Eigvec(nn.Module):
         self.bn4 = nn.BatchNorm2d(256)
         self.bn5 = nn.BatchNorm1d(args.emb_dims)
 
-        self.conv1 = nn.Sequential(nn.Conv2d(3 * 2, 64, kernel_size=1, bias=False),
+        self.conv1 = nn.Sequential(nn.Conv2d(3 + self.eigen_topk, 64, kernel_size=1, bias=False),
                                    self.bn1,
                                    nn.LeakyReLU(negative_slope=0.2))
         self.conv2 = nn.Sequential(nn.Conv2d(64*2, 64, kernel_size=1, bias=False),
@@ -314,7 +319,7 @@ class DGCNN_Eigvec(nn.Module):
             x, self.eigen_k, self.eigen_topk, ti_hint_only=True)
 
         x = get_graph_feature(x, k=self.k)
-        x[:, :3, :] = eigvecs # substitute diff with eigvecs.
+        x = torch.concat((eigvecs, x[:, 3:, :]), dim=1)
         x = self.conv1(x)
         x1 = x.max(dim=-1, keepdim=False)[0]
 
