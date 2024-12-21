@@ -60,6 +60,11 @@ def rotate_pointcloud(pointcloud):
     rot = Rotation.from_euler(dirs, angles)
     return pointcloud @ rot.as_matrix().astype(np.float32)
 
+def rotate_pointcloud_only_z(pointcloud):
+    angle = np.random.uniform(0, 2 * np.pi)
+    rot = Rotation.from_euler('z', angle)
+    return pointcloud @ rot.as_matrix().astype(np.float32)
+
 def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.02):
     N, C = pointcloud.shape
     pointcloud += np.clip(sigma * np.random.randn(N, C), -1*clip, clip)
@@ -78,7 +83,11 @@ class ModelNet40(Dataset):
         if self.partition == 'train':
             pointcloud = translate_pointcloud(pointcloud)
             np.random.shuffle(pointcloud)
-        pointcloud = rotate_pointcloud(pointcloud)
+            pointcloud = rotate_pointcloud_only_z(pointcloud)
+
+        if self.partition == 'test':
+            pointcloud = rotate_pointcloud(pointcloud)
+
         return pointcloud, label
 
     def __len__(self):
