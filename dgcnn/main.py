@@ -15,11 +15,10 @@ from email.policy import default
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from data import ModelNet40
-from model import PointNet, DGCNN, DGCNN_Eigval, DGCNN_Eigvec, DGCNN_Brute
+from model import PointNet, DGCNN, DGCNN_Eigval, DGCNN_Eigvec, DGCNN_PCA, DGCNN_Brute
 import numpy as np
 from torch.utils.data import DataLoader
 from util import cal_loss, IOStream
@@ -41,9 +40,9 @@ def _init_():
     shutil.copy("data.py", "checkpoints/" + args.exp_name + "/data.py.backup")
 
 def train(args, io):
-    train_loader = DataLoader(ModelNet40(partition='train', num_points=args.num_points), num_workers=8,
+    train_loader = DataLoader(ModelNet40(partition='train', rotation_str=args.train_rotate, num_points=args.num_points), num_workers=8,
                               batch_size=args.batch_size, shuffle=True, drop_last=True)
-    test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points), num_workers=8,
+    test_loader = DataLoader(ModelNet40(partition='test', rotation_str=args.test_rotate, num_points=args.num_points), num_workers=8,
                              batch_size=args.test_batch_size, shuffle=True, drop_last=False)
 
     device = torch.device("cuda" if args.cuda else "cpu")
@@ -57,6 +56,8 @@ def train(args, io):
         model = DGCNN_Eigval(args).to(device)
     elif args.model == 'dgcnn_eigvec':
         model = DGCNN_Eigvec(args).to(device)
+    elif args.model == 'dgcnn_pca':
+        model = DGCNN_PCA(args).to(device)
     elif args.model == 'dgcnn_brute':
         model = DGCNN_Brute(args).to(device)
     else:
@@ -183,8 +184,8 @@ if __name__ == "__main__":
     parser.add_argument('--exp_name', type=str, default='exp', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='dgcnn', metavar='N',
-                        choices=['pointnet', 'dgcnn', 'dgcnn_eigval', 'dgcnn_eigvec', 'dgcnn_brute'],
-                        help='Model to use, [pointnet, dgcnn, dgcnn_eigval, dgcnn_eigvec, dgcnn_brute]')
+                        choices=['pointnet', 'dgcnn', 'dgcnn_eigval', 'dgcnn_eigvec', 'dgcnn_brute', 'dgcnn_pca'],
+                        help='Model to use, [pointnet, dgcnn, dgcnn_eigval, dgcnn_eigvec, dgcnn_brute, dgcnn_pca]')
     parser.add_argument('--dataset', type=str, default='modelnet40', metavar='N',
                         choices=['modelnet40'])
     parser.add_argument('--batch_size', type=int, default=32, metavar='batch_size',
@@ -220,6 +221,9 @@ if __name__ == "__main__":
     parser.add_argument("--eig_knn_k", type=int, default=20,
                         help='Num of nearest neighbors for eigen extraction to use')
     parser.add_argument("--compact_feature", "-c", type=int, default=16)
+    parser.add_argument("--train_rotate", type=str, default="")
+    parser.add_argument("--test_rotate", type=str, default="")
+    parser.add_argument("--only_naive", type=bool, default=False)
     args = parser.parse_args()
 
     _init_()

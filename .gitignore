@@ -1,5 +1,5 @@
 dgcnn/data/
-dgcnn/checkpoints/
+dgcnn/checkpoints*/
 dgcnn/log/
 dgcnn/pretrained/
 *.pyc

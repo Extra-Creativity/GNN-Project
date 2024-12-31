@@ -1,29 +1,35 @@
-# SOME_TITLE
-写了两个简单的model（model.py里），利用的是那个矩阵的特征值和特征向量的旋转不变；由于整个群体的特征计算太慢，因此局部
-进行计算。目前修改的比较少，就是对于KNN里的局部计算上述特征，而且没有逐层计算。在传入的参数里`eig_topk`表示选择k个
-特征值，`eig_knn_k`表示求特征值的KNN范围。
+# Towards Rotation-Invariant Point Cloud Classification
+
+首先进行环境安装（如遇到名称冲突或cuda版本不适合，可在yml中进行调整）：
 ```commandline
-python main.py --exp_name=dgcnn_eigval_1024 --model=dgcnn_eigval --num_points=1024 --k=20 --eig_topk=3 --eig_knn_k=20 --use_sgd=True
-python main.py --exp_name=dgcnn_eigvec_1024 --model=dgcnn_eigvec --num_points=1024 --k=20 --eig_topk=3 --eig_knn_k=20 --use_sgd=True
-python main.py --exp_name=dgcnn_1024 --model=dgcnn --num_points=1024 --k=20 --use_sgd=True
+conda env create -f env.yml
+cd dgcnn
 ```
-特别地，求特征值时使用的`torch.no_grad()`，即不从特征值向前传播梯度。
-+ `DGCNN_Eigval`，就是取topk个特征值，拼接到最初始的特征（即三维坐标）上面；网络就是把最开始的通道数量改为(3 + topk)*2，
-   *2是由于DGCNN用的是$f_j-f_i,f_i$的拼接。
-+ `DGCNN_Eigvec`，写了两个版本
-   + 上一个commit里是取topk特征值对应的特征向量，拼接到网络第一层卷积后的输出（`(batch_size, channel_num, k, num_points)`， 
-   给`channel_num`加了`eigen_knn_k`的维度）。
-   + 目前版本是把$f_j-f_i,f_i$换为$\text{eigen vector},f_i$，因为特征向量表达的也是局部特征。
 
-这些都是只对最初的特征进行修改，没有在后续的动态图中继续重新求特征向量。
+我们的各个模型的运行方式如下；特别地，所有模型要额外加上如下两个参数：
+```commandline
+--train_rotate=z --test_rotate=z 
+```
+其中具体的取值可以为`z`和`SO3`，表示对训练集/测试集使用何种旋转，上面的参数就是z/z旋转。不加参数时默认为不施加旋转。
 
-在`data.py`的Dataset里额外加了随机旋转。4080S里1个epoch只需要1min，还算比较快。
-
-### TODO
-1. 以上这些模型，包括DGCNN本体，可以train一下，看看加入这种旋转不变的特征有没有准确率的改善。
-   DGCNN重新train是因为它提供的pretrain训练时没有随机旋转（当然也可以测试一下这个
-   pretrain模型准确率，这个就是跑一下测试集，比较快）。
-2. 由于之前说的局部计算特征会失去全局特征的唯一性（就是大卸八块，每块独立旋转的问题），因此
-   这里还是保留了DGCNN原来的全局特征，旋转不变特征只是hint。可以考虑一下能不能构建出比较好的
-   全局特征，这样就完全不用旋转敏感的全局特征，比如之前说的重心间再搞一下特征向量之类的。
-
+1. 使用localized Gram矩阵特征向量的模型：
+    ```commandline
+    python main.py --exp_name=dgcnn_eigvec_1024 --model=dgcnn_eigvec --num_points=1024 --k=20 --eig_topk=16 --eig_knn_k=32 --use_sgd=True
+    ```
+2. 使用localized Gram的topk值（复用了参数`eigen_topk`）：
+    ```commandline
+    python main.py --exp_name=dgcnn_naive_1024 --model=dgcnn_pca --only_naive=True --num_points=1024 --k=20 --eig_topk=32 --eig_knn_k=32 --use_sgd=True
+    ```
+3. 仅使用点云中心的localized Gram压缩后作为输入：
+    ```commandline
+    python main.py --exp_name=dgcnn_brute_1024 --model=dgcnn_brute --num_points=1024 --k=20 --use_sgd=True
+    ```
+   可以使用`--compact_feature=xx`来指定压缩到的维度。
+4. 使用PCA后的点云作为输入：
+    ```commandline
+    python main.py --exp_name=dgcnn_pca_1024 --model=dgcnn_pca --num_points=1024 --k=20 --eig_topk=0 --use_sgd=True
+    ```
+5. 使用PCA作为输入，第一层补充使用localized Gram的topk值：
+    ```commandline
+    python main.py --exp_name=dgcnn_pca_naive_1024 --model=dgcnn_pca --num_points=1024 --k=20 --eig_topk=16 --eig_knn_k=32 --use_sgd=True
+    ```

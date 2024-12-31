@@ -53,6 +53,7 @@ def translate_pointcloud(pointcloud):
     translated_pointcloud = np.add(np.multiply(pointcloud, xyz1), xyz2).astype('float32')
     return translated_pointcloud
 
+# SO3
 def rotate_pointcloud(pointcloud):
     angles = np.random.uniform(0, 2 * np.pi, 3)
     dirs = ''.join(["xyz"[i] for i in np.random.permutation(3)])
@@ -60,6 +61,7 @@ def rotate_pointcloud(pointcloud):
     rot = Rotation.from_euler(dirs, angles)
     return pointcloud @ rot.as_matrix().astype(np.float32)
 
+# z
 def rotate_pointcloud_only_z(pointcloud):
     angle = np.random.uniform(0, 2 * np.pi)
     rot = Rotation.from_euler('z', angle)
@@ -70,12 +72,21 @@ def jitter_pointcloud(pointcloud, sigma=0.01, clip=0.02):
     pointcloud += np.clip(sigma * np.random.randn(N, C), -1*clip, clip)
     return pointcloud
 
+def rotate_by_str(rot_str, pointcloud):
+    if rot_str == 'z':
+        return rotate_pointcloud_only_z(pointcloud)
+    elif rot_str == 'SO3':
+        return rotate_pointcloud(pointcloud)
+    elif rot_str == '':
+        return pointcloud
+    raise NotImplementedError()
 
 class ModelNet40(Dataset):
-    def __init__(self, num_points, partition='train'):
+    def __init__(self, num_points, rotation_str, partition='train'):
         self.data, self.label = load_data(partition)
         self.num_points = num_points
         self.partition = partition
+        self.rotation_str = rotation_str
 
     def __getitem__(self, item):
         pointcloud = self.data[item][:self.num_points]
@@ -83,10 +94,8 @@ class ModelNet40(Dataset):
         if self.partition == 'train':
             pointcloud = translate_pointcloud(pointcloud)
             np.random.shuffle(pointcloud)
-            pointcloud = rotate_pointcloud_only_z(pointcloud)
 
-        if self.partition == 'test':
-            pointcloud = rotate_pointcloud(pointcloud)
+        pointcloud = rotate_by_str(self.rotation_str, pointcloud)
 
         return pointcloud, label
 
