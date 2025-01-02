@@ -18,7 +18,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from data import ModelNet40
-from model import PointNet, DGCNN, DGCNN_Eigval, DGCNN_Eigvec, DGCNN_PCA, DGCNN_Brute
+from model import PointNet, DGCNN, DGCNN_PCA, DGCNN_Brute, DGCNN_Centered, DGCNN_Local
 import numpy as np
 from torch.utils.data import DataLoader
 from util import cal_loss, IOStream
@@ -52,14 +52,14 @@ def train(args, io):
         model = PointNet(args).to(device)
     elif args.model == 'dgcnn':
         model = DGCNN(args).to(device)
-    elif args.model == 'dgcnn_eigval':
-        model = DGCNN_Eigval(args).to(device)
-    elif args.model == 'dgcnn_eigvec':
-        model = DGCNN_Eigvec(args).to(device)
     elif args.model == 'dgcnn_pca':
         model = DGCNN_PCA(args).to(device)
     elif args.model == 'dgcnn_brute':
         model = DGCNN_Brute(args).to(device)
+    elif args.model == 'dgcnn_centered':
+        model = DGCNN_Centered(args).to(device)
+    elif args.model == 'dgcnn_local':
+        model = DGCNN_Local(args).to(device)
     else:
         raise Exception("Not implemented")
     print(str(model))
@@ -184,8 +184,8 @@ if __name__ == "__main__":
     parser.add_argument('--exp_name', type=str, default='exp', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='dgcnn', metavar='N',
-                        choices=['pointnet', 'dgcnn', 'dgcnn_eigval', 'dgcnn_eigvec', 'dgcnn_brute', 'dgcnn_pca'],
-                        help='Model to use, [pointnet, dgcnn, dgcnn_eigval, dgcnn_eigvec, dgcnn_brute, dgcnn_pca]')
+                        choices=['pointnet', 'dgcnn', 'dgcnn_brute', 'dgcnn_pca', 'dgcnn_test', 'dgcnn_centered', 'dgcnn_local'],
+                        help='Model to use, [pointnet, dgcnn, dgcnn_brute, dgcnn_pca, dgcnn_centered, dgcnn_local]')
     parser.add_argument('--dataset', type=str, default='modelnet40', metavar='N',
                         choices=['modelnet40'])
     parser.add_argument('--batch_size', type=int, default=32, metavar='batch_size',
